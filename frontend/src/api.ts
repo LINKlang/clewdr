@@ -37,6 +37,7 @@ export async function postCookie(cookie: string) {
   if (!response.ok) {
     throw new Error(`Error ${response.status}: ${response.statusText}`);
   }
+  return response;
 }
 
 /**
