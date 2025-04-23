@@ -9,9 +9,10 @@ export async function getVersion() {
  * @returns The fetch response object
  *
  * Possible Status Codes:
- * - 200: Success
+ * - 201: Created (Success)
  * - 400: Invalid cookie
  * - 401: Invalid bearer token
+ * - 409: Duplicate cookie
  * - 500: Server error
  */
 export async function postCookie(cookie: string) {

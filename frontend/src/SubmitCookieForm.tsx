@@ -27,7 +27,7 @@ const CookieSubmitForm = () => {
     try {
       const response = await postCookie(cookie);
 
-      if (response.ok) {
+      if (response.status === 201 || response.status === 200) {
         setStatus({
           type: "success",
           message: "Cookie submitted successfully!",
@@ -42,6 +42,11 @@ const CookieSubmitForm = () => {
         setStatus({
           type: "error",
           message: "Authentication failed. Please set a valid auth token.",
+        });
+      } else if (response.status === 409) {
+        setStatus({
+          type: "error",
+          message: "Duplicate cookie – this cookie already exists.",
         });
       } else {
         setStatus({
