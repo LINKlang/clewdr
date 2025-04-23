@@ -32,7 +32,7 @@ pub enum CookieEvent {
     // 返回Cookie
     Return(CookieStatus, Option<Reason>),
     // 提交新的Cookie
-    Submit(CookieStatus),
+    Submit(CookieStatus, oneshot::Sender<Result<(), ClewdrError>>),
     // 检查超时的Cookie
     CheckTimeout,
     // 请求获取Cookie
@@ -70,7 +70,7 @@ impl CookieEvent {
     fn priority_value(&self) -> u8 {
         match self {
             CookieEvent::Return(_, _) => 0, // 最高优先级
-            CookieEvent::Submit(_) => 1,
+            CookieEvent::Submit(_, _) => 1,
             CookieEvent::Delete(_, _) => 2,
             CookieEvent::GetStatus(_) => 3,
             CookieEvent::CheckTimeout => 4,
@@ -117,8 +117,14 @@ impl CookieEventSender {
     pub async fn submit(
         &self,
         cookie: CookieStatus,
-    ) -> Result<(), mpsc::error::SendError<CookieEvent>> {
-        self.sender.send(CookieEvent::Submit(cookie)).await
+    ) -> Result<(), ClewdrError> {
+        use tokio::sync::oneshot;
+        let (tx, rx) = oneshot::channel();
+        self.sender.send(CookieEvent::Submit(cookie, tx)).await?;
+        match rx.await {
+            Ok(res) => res, 
+            Err(e) => Err(e.into()),
+        }
     }
 
     pub async fn get_status(&self) -> Result<CookieStatusInfo, ClewdrError> {
@@ -264,7 +270,7 @@ impl CookieManager {
         self.save();
     }
 
-    fn accept(&mut self, cookie: CookieStatus) {
+    fn accept(&mut self, cookie: CookieStatus) -> Result<(), ClewdrError> {
         if self.valid.iter().any(|c| c.cookie == cookie.cookie)
             || self.exhausted.iter().any(|c| c.cookie == cookie.cookie)
             || self.dispatched.keys().any(|c| c.cookie == cookie.cookie)
@@ -272,11 +278,13 @@ impl CookieManager {
             || self.config.wasted_cookie.iter().any(|c| c.cookie == cookie.cookie)
         {
             warn!("Cookie already exists");
-            return;
+            return Err(ClewdrError::DuplicateCookie);
         }
         self.config.cookie_array.push(cookie.clone());
-        self.save();
         self.valid.push_back(cookie.clone());
+        self.save();
+        info!("Cookie accepted: {}", cookie.cookie);
+        Ok(())
     }
 
     fn report(&self) -> CookieStatusInfo {
@@ -400,9 +408,10 @@ impl CookieManager {
                             // 处理返回的cookie (最高优先级)
                             self.collect(cookie, reason);
                         }
-                        CookieEvent::Submit(cookie) => {
+                        CookieEvent::Submit(cookie, responder) => {
                             // 处理提交的新cookie (次高优先级)
-                            self.accept(cookie);
+                            let res = self.accept(cookie);
+                            let _ = responder.send(res);
                         }
                         CookieEvent::CheckTimeout => {
                             // 处理超时检查 (中等优先级)

@@ -63,6 +63,8 @@ pub enum ClewdrError {
     TimestampError(i64),
     #[error("Walk directory error: {0}")]
     WalkDirError(#[from] walkdir::Error),
+    #[error("Cookie already exists")]
+    DuplicateCookie,
 }
 
 /// HTTP error response

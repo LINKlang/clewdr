@@ -4,7 +4,7 @@ use rquest::StatusCode;
 use tracing::{error, info, warn};
 
 use crate::{
-    VERSION_AUTHOR, config::CookieStatus, cookie_manager::CookieStatusInfo, state::ClientState,
+    VERSION_AUTHOR, config::CookieStatus, cookie_manager::CookieStatusInfo, state::ClientState, error::ClewdrError,
 };
 
 pub async fn api_submit(
@@ -20,14 +20,12 @@ pub async fn api_submit(
         return StatusCode::BAD_REQUEST;
     }
     c.reset_time = None;
-    info!("Cookie accepted: {}", c.cookie);
+
     match s.event_sender.submit(c).await {
-        Ok(_) => {
-            info!("Cookie submitted successfully");
-            StatusCode::OK
-        }
+        Ok(_) => StatusCode::CREATED,
+        Err(ClewdrError::DuplicateCookie) => StatusCode::CONFLICT,
         Err(e) => {
-            error!("Failed to submit cookie: {}", e);
+            error!("Failed to submit cookie: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         }
     }
