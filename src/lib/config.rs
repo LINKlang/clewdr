@@ -1,15 +1,22 @@
 use colored::Colorize;
+use figment::{
+    Figment,
+    providers::{Env, Format, Toml},
+};
+use itertools::Itertools;
 use passwords::PasswordGenerator;
 use rquest::Proxy;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display},
     hash::Hash,
+    path::PathBuf,
+    str::FromStr,
 };
 use tiktoken_rs::o200k_base;
 use tracing::{error, info, warn};
 
-use crate::{error::ClewdrError, utils::config_dir};
+use crate::error::ClewdrError;
 
 pub const CONFIG_NAME: &str = "config.toml";
 pub const ENDPOINT: &str = "https://claude.ai";
@@ -17,10 +24,22 @@ pub const ENDPOINT: &str = "https://claude.ai";
 const fn default_max_retries() -> usize {
     5
 }
+fn default_ip() -> String {
+    "127.0.0.1".to_string()
+}
+fn default_port() -> u16 {
+    8484
+}
+const fn default_use_real_roles() -> bool {
+    true
+}
+const fn default_padtxt_len() -> usize {
+    4000
+}
 
 /// A struct representing the configuration of the application
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Config {
+pub struct ClewdrConfig {
     // App settings
     #[serde(default)]
     pub check_update: bool,
@@ -38,18 +57,28 @@ pub struct Config {
     pub wasted_cookie: Vec<UselessCookie>,
 
     // Network settings
-    password: String,
-    pub proxy: String,
-    ip: String,
-    port: u16,
     #[serde(default)]
-    pub enable_oai: bool,
+    password: String,
+    #[serde(default)]
+    pub proxy: String,
+    #[serde(default)]
+    pub rproxy: String,
+    #[serde(default = "default_ip")]
+    ip: String,
+    #[serde(default = "default_port")]
+    port: u16,
 
     // Api settings
+    #[serde(default)]
+    pub enable_oai: bool,
+    #[serde(default = "default_max_retries")]
+    pub max_retries: usize,
     #[serde(default)]
     pub pass_params: bool,
     #[serde(default)]
     pub preserve_chats: bool,
+
+    // Cookie settings
     #[serde(default)]
     pub skip_warning: bool,
     #[serde(default)]
@@ -57,15 +86,18 @@ pub struct Config {
     #[serde(default)]
     pub skip_non_pro: bool,
 
-    // Proxy configurations
-    pub rproxy: String,
-
     // Prompt configurations
+    #[serde(default = "default_use_real_roles")]
     pub use_real_roles: bool,
+    #[serde(default)]
     pub custom_h: Option<String>,
+    #[serde(default)]
     pub custom_a: Option<String>,
+    #[serde(default)]
     pub custom_prompt: String,
+    #[serde(default)]
     pub padtxt_file: String,
+    #[serde(default = "default_padtxt_len")]
     pub padtxt_len: usize,
 
     // Skip field
@@ -112,7 +144,7 @@ impl Display for Reason {
 /// A struct representing a useless cookie
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UselessCookie {
-    pub cookie: CookieInfo,
+    pub cookie: ClewdrCookie,
     pub reason: Reason,
 }
 impl PartialEq for UselessCookie {
@@ -128,7 +160,7 @@ impl Hash for UselessCookie {
 }
 
 impl UselessCookie {
-    pub fn new(cookie: CookieInfo, reason: Reason) -> Self {
+    pub fn new(cookie: ClewdrCookie, reason: Reason) -> Self {
         Self { cookie, reason }
     }
 }
@@ -136,8 +168,7 @@ impl UselessCookie {
 /// A struct representing a cookie with its information
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct CookieStatus {
-    pub cookie: CookieInfo,
-    #[serde(deserialize_with = "validate_reset")]
+    pub cookie: ClewdrCookie,
     #[serde(default)]
     pub reset_time: Option<i64>,
 }
@@ -153,46 +184,24 @@ impl Hash for CookieStatus {
         self.cookie.hash(state);
     }
 }
+impl Ord for CookieStatus {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.cookie.cmp(&other.cookie)
+    }
+}
+impl PartialOrd for CookieStatus {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 /// Default cookie value for testing purposes
 const PLACEHOLDER_COOKIE: &str = "sk-ant-sid01----------------------------SET_YOUR_COOKIE_HERE----------------------------------------AAAAAAAA";
 
-/// Function to validate the reset time of a cookie while deserializing
-fn validate_reset<'de, D>(deserializer: D) -> Result<Option<i64>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    // skip no deserializable value
-    let Ok(value) = Option::<i64>::deserialize(deserializer) else {
-        return Ok(None);
-    };
-    // skip empty value
-    let Some(v) = value else {
-        return Ok(None);
-    };
-    // parse timestamp
-    let Some(time) = chrono::DateTime::from_timestamp(v, 0) else {
-        warn!("Invalid reset time: {}", v);
-        return Ok(None);
-    };
-    let now = chrono::Utc::now();
-    if time < now {
-        // cookie have reset
-        info!(
-            "Cookie reset time is in the past: {}",
-            time.to_string().green()
-        );
-        return Ok(None);
-    }
-    let remaining_time = time - now;
-    info!("Cookie reset in {} hours", remaining_time.num_hours());
-    Ok(Some(v))
-}
-
 impl CookieStatus {
     pub fn new(cookie: &str, reset_time: Option<i64>) -> Self {
         Self {
-            cookie: CookieInfo::from(cookie),
+            cookie: ClewdrCookie::from(cookie),
             reset_time,
         }
     }
@@ -215,11 +224,11 @@ impl CookieStatus {
 
 /// A struct representing a cookie
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct CookieInfo {
+pub struct ClewdrCookie {
     inner: String,
 }
 
-impl Default for CookieInfo {
+impl Default for ClewdrCookie {
     fn default() -> Self {
         Self {
             inner: PLACEHOLDER_COOKIE.to_string(),
@@ -227,21 +236,16 @@ impl Default for CookieInfo {
     }
 }
 
-impl CookieInfo {
+impl ClewdrCookie {
     /// Check if the cookie is valid format
     pub fn validate(&self) -> bool {
         // Check if the cookie is valid
-        let re = regex::Regex::new(r"sk-ant-sid01-[0-9A-Za-z_-]{86}-[0-9A-Za-z_-]{6}AA").unwrap();
+        let re = regex::Regex::new(r"^sk-ant-sid01-[0-9A-Za-z_-]{86}-[0-9A-Za-z_-]{6}AA$").unwrap();
         re.is_match(&self.inner)
-    }
-
-    pub fn clear(&mut self) {
-        // Clear the cookie
-        self.inner.clear();
     }
 }
 
-impl From<&str> for CookieInfo {
+impl From<&str> for ClewdrCookie {
     /// Create a new cookie from a string
     fn from(original: &str) -> Self {
         // split off first '@' to keep compatibility with clewd
@@ -261,19 +265,19 @@ impl From<&str> for CookieInfo {
     }
 }
 
-impl Display for CookieInfo {
+impl Display for ClewdrCookie {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "sessionKey={}", self.inner)
     }
 }
 
-impl Debug for CookieInfo {
+impl Debug for ClewdrCookie {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "sessionKey={}", self.inner)
     }
 }
 
-impl Serialize for CookieInfo {
+impl Serialize for ClewdrCookie {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -283,26 +287,26 @@ impl Serialize for CookieInfo {
     }
 }
 
-impl<'de> Deserialize<'de> for CookieInfo {
+impl<'de> Deserialize<'de> for ClewdrCookie {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        Ok(CookieInfo::from(s.as_str()))
+        Ok(ClewdrCookie::from(s.as_str()))
     }
 }
 
 /// Generate a random password of given length
-fn generate_password(length: usize) -> String {
+fn generate_password() -> String {
     let pg = PasswordGenerator {
-        length,
+        length: 64,
         numbers: true,
         lowercase_letters: true,
         uppercase_letters: true,
         symbols: true,
-        spaces: true,
-        exclude_similar_characters: false,
+        spaces: false,
+        exclude_similar_characters: true,
         strict: true,
     };
 
@@ -313,7 +317,7 @@ fn generate_password(length: usize) -> String {
     pg.generate_one().unwrap()
 }
 
-impl Default for Config {
+impl Default for ClewdrConfig {
     fn default() -> Self {
         Self {
             enable_oai: false,
@@ -345,7 +349,7 @@ impl Default for Config {
     }
 }
 
-impl Display for Config {
+impl Display for ClewdrConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // one line per field
         write!(
@@ -376,69 +380,28 @@ impl Display for Config {
     }
 }
 
-impl Config {
+impl ClewdrConfig {
     pub fn auth(&self, key: &str) -> bool {
         key == self.password
     }
 
     /// Load the configuration from the file
     pub fn load() -> Result<Self, ClewdrError> {
-        // try to read from pwd
-        let file_string = std::fs::read_to_string(CONFIG_NAME).or_else(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                // try to read from exec path
-                let exec_path = std::env::current_exe()?;
-                let config_dir = exec_path.parent().ok_or(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "Failed to get parent directory",
-                ))?;
-                let config_path = config_dir.join(CONFIG_NAME);
-                std::fs::read_to_string(config_path)
-            } else {
-                Err(e)
-            }
-        });
-        match file_string {
-            Ok(file_string) => {
-                // parse the config file
-                let mut config: Config = toml::de::from_str(&file_string)?;
-                config.load_padtxt();
-                config = config.validate();
-                config.save()?;
-                Ok(config)
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                // create a default config file
-                let exec_path = std::env::current_exe()?;
-                let config_dir = exec_path.parent().ok_or(ClewdrError::PathNotFound(
-                    "Failed to get parent directory".to_string(),
-                ))?;
-                let mut default_config = Config::default();
-                let canonical_path = std::fs::canonicalize(config_dir)?;
-                println!(
-                    "Default config file created at {}",
-                    canonical_path.join(CONFIG_NAME).display()
-                );
-                println!("{}", "SET YOUR COOKIE HERE".green());
-                default_config = default_config.validate();
-                default_config.save()?;
-                Ok(default_config)
-            }
-            Err(e) => Err(e.into()),
-        }
+        let config: ClewdrConfig = Figment::new()
+            .merge(Toml::file(CONFIG_NAME))
+            .merge(Env::prefixed("CLEWDR_"))
+            .extract_lossy()?;
+        let config = config.validate();
+        config.save()?;
+        Ok(config)
     }
 
     fn load_padtxt(&mut self) {
-        let padtxt = &self.padtxt_file;
-        if padtxt.trim().is_empty() {
+        let padtxt = &self.padtxt_file.trim();
+        if padtxt.is_empty() {
             return;
         }
-
-        let Ok(dir) = config_dir() else {
-            error!("No config found in cwd or exec dir");
-            return;
-        };
-        let padtxt_path = dir.join(padtxt);
+        let Ok(padtxt_path) = PathBuf::from_str(padtxt);
         if !padtxt_path.exists() {
             error!("Pad txt file not found: {}", padtxt_path.display());
             return;
@@ -480,36 +443,24 @@ impl Config {
 
     /// Save the configuration to a file
     pub fn save(&self) -> Result<(), ClewdrError> {
-        // try find existing config file
-        let existing = config_dir();
-        if let Ok(existing) = existing {
-            let config_path = existing.join(CONFIG_NAME);
-            // overwrite the file if it exists
-            std::fs::write(config_path, toml::ser::to_string_pretty(self)?)?;
-            return Ok(());
-        }
-        // try to create a new config file in exec path or pwd
-        let exec_path = std::env::current_exe()?;
-        let config_dir = exec_path.parent().ok_or(ClewdrError::PathNotFound(
-            "Failed to get parent directory".to_string(),
-        ))?;
-        // create the config directory if it doesn't exist
-        if !config_dir.exists() {
-            std::fs::create_dir_all(config_dir)?;
-        }
-        // Save the config to a file
-        let config_path = config_dir.join(CONFIG_NAME);
-        let config_string = toml::ser::to_string_pretty(self)?;
-        std::fs::write(config_path, config_string)?;
+        let Ok(config_path) = PathBuf::from_str(CONFIG_NAME);
+        std::fs::write(config_path, toml::ser::to_string_pretty(self)?)?;
         Ok(())
     }
 
     /// Validate the configuration
     fn validate(mut self) -> Self {
         if self.password.trim().is_empty() {
-            self.password = generate_password(32);
+            self.password = generate_password();
             self.save().expect("Failed to save config");
         }
+        self.cookie_array = self
+            .cookie_array
+            .into_iter()
+            .map(|x| x.reset())
+            .sorted()
+            .collect();
+        self.cookie_array.dedup();
         self.ip = self.ip.trim().to_string();
         self.rproxy = self.rproxy.trim().to_string();
         self.proxy = self.proxy.trim().to_string();
@@ -523,6 +474,7 @@ impl Config {
                 .ok()
         };
         self.rquest_proxy = proxy;
+        self.load_padtxt();
         self
     }
 }

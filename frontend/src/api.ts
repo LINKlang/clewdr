@@ -26,7 +26,17 @@ export async function postCookie(cookie: string) {
     body: JSON.stringify({ cookie }),
   });
 
-  return response;
+  if (response.status === 400) {
+    throw new Error("Invalid cookie format");
+  } else if (response.status === 401) {
+    throw new Error("Authentication failed. Please set a valid auth token.");
+  } else if (response.status === 500) {
+    throw new Error("Server error.");
+  }
+
+  if (!response.ok) {
+    throw new Error(`Error ${response.status}: ${response.statusText}`);
+  }
 }
 
 /**

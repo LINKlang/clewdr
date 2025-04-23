@@ -1,7 +1,7 @@
 use axum::{
     Router,
     http::HeaderMap,
-    routing::{get, options, post, delete},
+    routing::{delete, get, options, post},
 };
 use rquest::header::{
     ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN,
@@ -9,8 +9,12 @@ use rquest::header::{
 use tower_http::services::ServeDir;
 
 use crate::{
-    api::{api_auth, api_completion, api_get_cookies, api_messages, api_submit, api_delete_cookie, api_version},
+    api::{
+        api_auth, api_completion, api_delete_cookie, api_get_cookies, api_messages, api_submit,
+        api_version,
+    },
     state::ClientState,
+    utils::STATIC_DIR,
 };
 
 /// RouterBuilder for the application
@@ -22,7 +26,7 @@ impl RouterBuilder {
     /// Create a new RouterBuilder instance
     pub fn new(state: ClientState) -> Self {
         // Serve static files from "static" directory
-        let static_service = ServeDir::new("static");
+        let static_service = ServeDir::new(STATIC_DIR);
 
         let r = Router::new()
             .route("/v1", options(api_options))

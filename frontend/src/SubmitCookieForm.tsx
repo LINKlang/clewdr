@@ -57,7 +57,7 @@ const CookieSubmitForm = () => {
     } catch {
       setStatus({
         type: "error",
-        message: "Network error. Please check your connection.",
+        message: e instanceof Error ? e.message : "Unknown error",
       });
     } finally {
       setIsSubmitting(false);

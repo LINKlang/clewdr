@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use crate::client::SUPER_CLIENT;
 use crate::client::SetupRequest;
-use crate::config::Config;
+use crate::config::ClewdrConfig;
 use crate::config::CookieStatus;
 use crate::config::Reason;
 use crate::cookie_manager::CookieEventSender;
@@ -21,7 +21,7 @@ use crate::error::ClewdrError;
 #[derive(Clone)]
 pub struct ClientState {
     pub cookie: Option<CookieStatus>,
-    pub config: Arc<Config>,
+    pub config: Arc<ClewdrConfig>,
     pub event_sender: CookieEventSender,
     pub org_uuid: Option<String>,
     pub conv_uuid: Option<String>,
@@ -31,7 +31,7 @@ pub struct ClientState {
 
 impl ClientState {
     /// Create a new AppState instance
-    pub fn new(config: Config, event_sender: CookieEventSender) -> Self {
+    pub fn new(config: ClewdrConfig, event_sender: CookieEventSender) -> Self {
         ClientState {
             config: Arc::new(config),
             event_sender,

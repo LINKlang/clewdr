@@ -1,11 +1,11 @@
 use clap::Parser;
 use clewdr::{
     self, BANNER,
-    config::{CONFIG_NAME, Config},
+    config::{CONFIG_NAME, ClewdrConfig},
     cookie_manager::CookieManager,
     error::ClewdrError,
     state::ClientState,
-    utils::config_dir,
+    utils::{CLEWDR_DIR, LOG_DIR},
 };
 use colored::Colorize;
 use tracing::warn;
@@ -18,20 +18,15 @@ use tracing_subscriber::{
 /// Async main function using tokio runtime
 #[tokio::main]
 async fn main() -> Result<(), ClewdrError> {
-    enable_ansi_support::enable_ansi_support()?;
+    let _ = enable_ansi_support::enable_ansi_support();
     // parse command line arguments
     clewdr::Args::parse();
+    // setup dir
+    let _ = CLEWDR_DIR;
     // set up logging time format
     let timer = ChronoLocal::new("%H:%M:%S%.3f".to_string());
     // set up logging
-    // create log directory if it doesn't exist
-    let path = config_dir()?;
-    let log_dir = path.join("log");
-    if !log_dir.exists() {
-        std::fs::create_dir_all(&log_dir)?
-    }
-    // create log file
-    let file_appender = tracing_appender::rolling::daily(log_dir, "clewdr.log");
+    let file_appender = tracing_appender::rolling::daily(LOG_DIR, "clewdr.log");
     let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
 
     let subscriber = Registry::default()
@@ -50,9 +45,9 @@ async fn main() -> Result<(), ClewdrError> {
 
     println!("{}", *BANNER);
     // load config from file
-    let config = Config::load()?;
+    let config = ClewdrConfig::load()?;
 
-    let updater = clewdr::update::Updater::new(config.clone())?;
+    let updater = clewdr::update::ClewdrUpdater::new(config.clone())?;
     if let Err(e) = updater.check_for_updates().await {
         warn!("Update check failed: {}", e);
     }
@@ -60,12 +55,10 @@ async fn main() -> Result<(), ClewdrError> {
     // print the address
     let addr = format!("http://{}", config.address());
     let api_addr = format!("{}/v1", addr);
-    if let Ok(dir) = config_dir() {
-        println!(
-            "Config dir: {}",
-            dir.join(CONFIG_NAME).display().to_string().blue()
-        );
-    }
+    println!(
+        "Config dir: {}",
+        CLEWDR_DIR.join(CONFIG_NAME).display().to_string().blue()
+    );
     println!("API address: {}", api_addr.green());
     println!("Web address: {}", addr.green());
     println!("{}", config);

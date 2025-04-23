@@ -17,10 +17,13 @@ pub mod types;
 pub mod update;
 pub mod utils;
 
-pub const VERSION_AUTHOR: &str = formatc!(
-    "v{} by {}",
+pub const IS_DEV: bool = cfg!(debug_assertions);
+
+pub const VERSION_INFO: &str = formatc!(
+    "v{} by {} in {} mode",
     env!("CARGO_PKG_VERSION"),
-    env!("CARGO_PKG_AUTHORS")
+    env!("CARGO_PKG_AUTHORS"),
+    if IS_DEV { "dev" } else { "production" }
 );
 
 /// Header for the application
@@ -28,7 +31,7 @@ pub static BANNER: LazyLock<String> = LazyLock::new(|| {
     let standard_font = FIGfont::standard().unwrap();
     let figure = standard_font.convert("ClewdR");
     let banner = figure.unwrap().to_string();
-    format!("{}\n{}", banner, VERSION_AUTHOR)
+    format!("{}\n{}", banner, VERSION_INFO)
 });
 
 /// Command line arguments for the application
