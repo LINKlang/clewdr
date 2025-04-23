@@ -1,27 +1,47 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
+use std::sync::LazyLock;
 use tracing::error;
 use walkdir::WalkDir;
 
-use crate::{config::CONFIG_NAME, error::ClewdrError};
+use crate::error::ClewdrError;
+
+pub static CLEWDR_DIR: LazyLock<PathBuf> =
+    LazyLock::new(|| set_clewdr_dir().expect("Failed to get dir"));
+pub const LOG_DIR: &str = "log";
+pub const STATIC_DIR: &str = "static";
 
 /// Get directory of the config file
-pub fn config_dir() -> Result<PathBuf, ClewdrError> {
-    let cwd = std::env::current_dir().map_err(|_| ClewdrError::PathNotFound("cwd".to_string()))?;
-    let cwd_config = cwd.join(CONFIG_NAME);
-    if cwd_config.exists() {
-        return Ok(cwd);
+fn set_clewdr_dir() -> Result<PathBuf, ClewdrError> {
+    let dir = {
+        #[cfg(debug_assertions)]
+        {
+            // In debug mode, use the current working directory
+            // to find the config file
+            std::env::current_dir()?
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            // In release mode, use the directory of the executable
+            // to find the config file
+            let exec_path = std::env::current_exe()?;
+            let exec_dir = exec_path
+                .parent()
+                .ok_or_else(|| ClewdrError::PathNotFound("exec dir".to_string()))?
+                .canonicalize()?
+                .to_path_buf();
+            // cd to the exec dir
+            std::env::set_current_dir(&exec_dir)?;
+            exec_dir
+        }
+    };
+    // create log dir
+    let log_dir = dir.join(LOG_DIR);
+    if !log_dir.exists() {
+        fs::create_dir_all(&log_dir)?;
     }
-    let exec_path =
-        std::env::current_exe().map_err(|_| ClewdrError::PathNotFound("exec".to_string()))?;
-    let exec_dir = exec_path
-        .parent()
-        .ok_or_else(|| ClewdrError::PathNotFound("exec dir".to_string()))?
-        .to_path_buf();
-    // cd to the exec dir
-    std::env::set_current_dir(&exec_dir)
-        .map_err(|_| ClewdrError::PathNotFound("exec dir".to_string()))?;
-    Ok(exec_dir)
+    Ok(dir)
 }
 
 /// Recursively copies all files and subdirectories from `src` to `dst`
@@ -73,17 +93,7 @@ pub fn print_out_json(json: &impl serde::ser::Serialize, file_name: &str) {
 
 /// Helper function to print out text
 pub fn print_out_text(text: &str, file_name: &str) {
-    let Ok(dir) = config_dir() else {
-        error!("No config found in cwd or exec dir");
-        return;
-    };
-    let log_dir = dir.join("log");
-    if !log_dir.exists() {
-        if let Err(e) = std::fs::create_dir_all(&log_dir) {
-            error!("Failed to create log dir: {}\n", e);
-            return;
-        }
-    }
+    let Ok(log_dir) = PathBuf::from_str(LOG_DIR);
     let file_name = log_dir.join(file_name);
     let Ok(mut file) = std::fs::File::options()
         .write(true)

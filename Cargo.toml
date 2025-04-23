@@ -55,10 +55,10 @@ tracing-appender = "0.2"
 self-replace = "1"
 zip = "2"
 tempfile = "3"
-tokio-stream = "0.1"
 transform-stream = "0.3"
 axum-auth = "0.8"
 tiktoken-rs = "0.6"
 passwords = "3"
 tower-http = { version = "0.6", features = ["fs", "trace"] }
 walkdir = "2"
+figment = { version = "0.10", features = ["env", "json", "toml"] }

@@ -4,10 +4,13 @@ use serde::Deserialize;
 use std::env;
 use std::fs::File;
 use std::io::{BufReader, copy};
+use std::path::PathBuf;
+use std::str::FromStr;
 use tracing::info;
 use zip::ZipArchive;
 
-use crate::{Args, config::Config, error::ClewdrError, utils::config_dir, utils::copy_dir_all};
+use crate::utils::STATIC_DIR;
+use crate::{Args, config::ClewdrConfig, error::ClewdrError, utils::copy_dir_all};
 
 #[derive(Debug, Deserialize)]
 struct GitHubRelease {
@@ -21,16 +24,16 @@ struct GitHubAsset {
     browser_download_url: String,
 }
 
-pub struct Updater {
-    config: Config,
+pub struct ClewdrUpdater {
+    config: ClewdrConfig,
     client: Client,
     user_agent: String,
     repo_owner: &'static str,
     repo_name: &'static str,
 }
 
-impl Updater {
-    pub fn new(config: Config) -> Result<Self, ClewdrError> {
+impl ClewdrUpdater {
+    pub fn new(config: ClewdrConfig) -> Result<Self, ClewdrError> {
         let authors = option_env!("CARGO_PKG_AUTHORS").unwrap_or_default();
         let repo_owner = authors.split(':').next().unwrap_or("Xerxes-2");
         let repo_name = env!("CARGO_PKG_NAME");
@@ -149,7 +152,7 @@ impl Updater {
             )));
         }
 
-        let extract_static_path = extract_dir.join("static");
+        let extract_static_path = extract_dir.join(STATIC_DIR);
         if !extract_static_path.exists() {
             return Err(ClewdrError::AssetError(
                 "Static assets not found in the update package".to_string(),
@@ -157,8 +160,7 @@ impl Updater {
         }
 
         // delete old static assets
-        let current_dir = config_dir()?;
-        let static_path = current_dir.join("static");
+        let Ok(static_path) = PathBuf::from_str(STATIC_DIR);
         if static_path.exists() {
             std::fs::remove_dir_all(&static_path)?;
         }

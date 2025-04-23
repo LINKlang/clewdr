@@ -19,49 +19,51 @@ use crate::{
 
 #[derive(thiserror::Error, Debug)]
 pub enum ClewdrError {
-    #[error("Failed to get cookie: {0}")]
+    #[error(transparent)]
+    FigmentError(#[from] figment::Error),
+    #[error("Cookie request error: {0}")]
     MpscSendError(#[from] tokio::sync::mpsc::error::SendError<CookieEvent>),
     #[error("Retries exceeded")]
     TooManyRetries,
-    #[error("Stream event source error: {0}")]
+    #[error(transparent)]
     EventSourceError(#[from] eventsource_stream::EventStreamError<rquest::Error>),
-    #[error("Zip error: {0}")]
+    #[error(transparent)]
     ZipError(#[from] zip::result::ZipError),
     #[error("Asset Error: {0}")]
     AssetError(String),
     #[error("Invalid version: {0}")]
     InvalidVersion(String),
-    #[error("Failed to parse integer: {0}")]
+    #[error(transparent)]
     ParseIntError(#[from] std::num::ParseIntError),
-    #[error("Failed to parse URL: {0}")]
+    #[error(transparent)]
     UrlParseError(#[from] url::ParseError),
-    #[error("Tokio oneshot recv error: {0}")]
+    #[error("Cookie receive error: {0}")]
     CookieDispatchError(#[from] oneshot::error::RecvError),
     #[error("No cookie available")]
     NoCookieAvailable,
     #[error("Invalid Cookie, reason: {0}")]
     InvalidCookie(Reason),
-    #[error("TOML Deserialize error: {0}")]
+    #[error(transparent)]
     TomlDeError(#[from] toml::de::Error),
-    #[error("TOML Serialize error: {0}")]
+    #[error(transparent)]
     TomlSeError(#[from] toml::ser::Error),
-    #[error("Regex error: {0}")]
+    #[error(transparent)]
     RegexError(#[from] regex::Error),
-    #[error("Rquest error: {0}")]
+    #[error(transparent)]
     RquestError(#[from] rquest::Error),
-    #[error("UTF8 error: {0}")]
+    #[error(transparent)]
     UTF8Error(#[from] std::string::FromUtf8Error),
     #[error("Http error: code: {}, body: {}", .0.to_string().red(), serde_json::to_string_pretty(.1).unwrap())]
     OtherHttpError(StatusCode, HttpError),
     #[error("Unexpected None")]
     UnexpectedNone,
-    #[error("IO error: {0}")]
+    #[error(transparent)]
     IoError(#[from] std::io::Error),
     #[error("Config error: {0}")]
     PathNotFound(String),
     #[error("Invalid timestamp: {0}")]
     TimestampError(i64),
-    #[error("Walk directory error: {0}")]
+    #[error(transparent)]
     WalkDirError(#[from] walkdir::Error),
     #[error("Cookie already exists")]
     DuplicateCookie,

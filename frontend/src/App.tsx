@@ -6,7 +6,7 @@ import CookieTabs from "./CookieTabs";
 
 function App() {
   const [version, setVersion] = useState("");
-  const [activeTab, setActiveTab] = useState("token"); // "cookie" or "token"
+  const [activeTab, setActiveTab] = useState("cookie"); // "cookie" or "token"
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
@@ -80,7 +80,7 @@ function App() {
                     : "text-gray-400 hover:text-gray-300"
                 }`}
               >
-                Account
+                Auth
               </button>
             </div>
 
@@ -89,9 +89,7 @@ function App() {
             ) : (
               <div className="bg-gray-700 p-6 rounded-lg">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium text-white">
-                    Account Settings
-                  </h3>
+                  <h3 className="text-lg font-medium text-white">Log Out</h3>
                   <button
                     onClick={() => {
                       localStorage.removeItem("authToken");

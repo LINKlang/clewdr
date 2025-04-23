@@ -12,7 +12,7 @@ use tokio::{
 use tracing::{error, info, warn};
 
 use crate::{
-    config::{Config, CookieStatus, Reason, UselessCookie},
+    config::{ClewdrConfig, CookieStatus, Reason, UselessCookie},
     error::ClewdrError,
 };
 
@@ -87,7 +87,7 @@ pub struct CookieManager {
     invalid: HashSet<UselessCookie>,
     event_queue: Arc<Mutex<BinaryHeap<CookieEvent>>>,
     event_notify: Arc<Notify>, // 添加一个通知器
-    config: Config,
+    config: ClewdrConfig,
 }
 
 // 提供给外部的发送者接口
@@ -146,7 +146,7 @@ impl CookieEventSender {
 }
 
 impl CookieManager {
-    pub fn start(mut config: Config) -> CookieEventSender {
+    pub fn start(mut config: ClewdrConfig) -> CookieEventSender {
         config.cookie_array = config.cookie_array.into_iter().map(|c| c.reset()).collect();
         let valid = VecDeque::from_iter(
             config

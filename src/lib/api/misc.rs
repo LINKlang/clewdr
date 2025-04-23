@@ -4,7 +4,7 @@ use rquest::StatusCode;
 use tracing::{error, info, warn};
 
 use crate::{
-    VERSION_AUTHOR, config::CookieStatus, cookie_manager::CookieStatusInfo, state::ClientState, error::ClewdrError,
+    VERSION_INFO, config::CookieStatus, cookie_manager::CookieStatusInfo, state::ClientState, error::ClewdrError,
 };
 
 pub async fn api_submit(
@@ -90,7 +90,7 @@ pub async fn api_delete_cookie(
 }
 
 pub async fn api_version() -> String {
-    VERSION_AUTHOR.to_string()
+    VERSION_INFO.to_string()
 }
 
 pub async fn api_auth(State(s): State<ClientState>, AuthBearer(t): AuthBearer) -> StatusCode {
