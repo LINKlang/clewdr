@@ -265,12 +265,11 @@ impl CookieManager {
     }
 
     fn accept(&mut self, cookie: CookieStatus) {
-        if self.config.cookie_array.contains(&cookie)
-            || self
-                .config
-                .wasted_cookie
-                .iter()
-                .any(|c| c.cookie == cookie.cookie)
+        if self.valid.iter().any(|c| c.cookie == cookie.cookie)
+            || self.exhausted.iter().any(|c| c.cookie == cookie.cookie)
+            || self.dispatched.keys().any(|c| c.cookie == cookie.cookie)
+            || self.config.cookie_array.contains(&cookie)
+            || self.config.wasted_cookie.iter().any(|c| c.cookie == cookie.cookie)
         {
             warn!("Cookie already exists");
             return;
