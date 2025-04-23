@@ -458,7 +458,9 @@ impl ClewdrConfig {
             .map(|x| x.reset())
             .sorted()
             .collect();
-        self.cookie_array.dedup();
+        if self.check_duplicate {
+            self.cookie_array.dedup();
+        }
         self.ip = self.ip.trim().to_string();
         self.rproxy = self.rproxy.trim().to_string();
         self.proxy = self.proxy.trim().to_string();
