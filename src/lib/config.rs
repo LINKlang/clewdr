@@ -28,6 +28,8 @@ pub struct Config {
     pub auto_update: bool,
     #[serde(default = "default_max_retries")]
     pub max_retries: usize,
+    #[serde(default)]
+    pub check_duplicate: bool,
 
     // Cookie configurations
     #[serde(default)]
@@ -320,6 +322,7 @@ impl Default for Config {
             auto_update: false,
             cookie_array: vec![],
             wasted_cookie: Vec::new(),
+            check_duplicate: true,
             password: String::new(),
             proxy: String::new(),
             ip: "127.0.0.1".to_string(),

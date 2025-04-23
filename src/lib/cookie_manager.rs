@@ -271,11 +271,11 @@ impl CookieManager {
     }
 
     fn accept(&mut self, cookie: CookieStatus) -> Result<(), ClewdrError> {
-        if self.valid.iter().any(|c| c.cookie == cookie.cookie)
+        if self.config.check_duplicate && (self.valid.iter().any(|c| c.cookie == cookie.cookie)
             || self.exhausted.iter().any(|c| c.cookie == cookie.cookie)
             || self.dispatched.keys().any(|c| c.cookie == cookie.cookie)
             || self.config.cookie_array.contains(&cookie)
-            || self.config.wasted_cookie.iter().any(|c| c.cookie == cookie.cookie)
+            || self.config.wasted_cookie.iter().any(|c| c.cookie == cookie.cookie))
         {
             warn!("Cookie already exists");
             return Err(ClewdrError::DuplicateCookie);
