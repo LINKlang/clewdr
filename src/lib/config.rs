@@ -45,8 +45,6 @@ pub struct ClewdrConfig {
     pub check_update: bool,
     #[serde(default)]
     pub auto_update: bool,
-    #[serde(default = "default_max_retries")]
-    pub max_retries: usize,
     #[serde(default)]
     pub check_duplicate: bool,
 
